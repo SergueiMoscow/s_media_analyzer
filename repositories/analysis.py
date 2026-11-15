@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.settings import settings
 from db.models import Face, FaceCluster, MediaAnalysis, MediaGeo, ScannedFile
 
+ANALYSIS_KINDS = ['faces', 'geo']
+ANALYSIS_STATUSES = ['pending', 'processing', 'done', 'failed', 'skipped']
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -258,9 +261,11 @@ async def get_stats(session: AsyncSession) -> dict:
         select(MediaAnalysis.kind, MediaAnalysis.status, func.count())
         .group_by(MediaAnalysis.kind, MediaAnalysis.status)
     )
-    queue: dict[str, dict[str, int]] = {}
+    queue: dict[str, dict[str, int]] = {
+        kind: {status: 0 for status in ANALYSIS_STATUSES} for kind in ANALYSIS_KINDS
+    }
     for kind, status, count in rows.all():
-        queue.setdefault(kind, {})[status] = count
+        queue[kind][status] = count
 
     scanned_files = await session.scalar(select(func.count()).select_from(ScannedFile)) or 0
     faces_total = await session.scalar(select(func.count()).select_from(Face)) or 0

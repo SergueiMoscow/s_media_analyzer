@@ -137,6 +137,42 @@ async def test_geo_search_and_stats(scan_dirs):
 
 
 @pytest.mark.usefixtures('apply_migrations')
+async def test_stats_queue_dense_all_statuses(scan_dirs):
+    storage_id, photos, _ = scan_dirs
+
+    async with AsyncSession() as session:
+        # пустая очередь: оба kind и все 5 статусов присутствуют (нулевые)
+        empty = await get_stats(session)
+        for kind in ('faces', 'geo'):
+            assert empty['queue'][kind] == {
+                'pending': 0,
+                'processing': 0,
+                'done': 0,
+                'failed': 0,
+                'skipped': 0,
+            }
+
+        # один файл → по одной pending-задаче, остальные статусы всё равно в ответе
+        (photos / 'a.jpg').write_bytes(b'fake')
+        await scan_folder(session, storage_id)
+        stats = await get_stats(session)
+        assert stats['queue']['faces'] == {
+            'pending': 1,
+            'processing': 0,
+            'done': 0,
+            'failed': 0,
+            'skipped': 0,
+        }
+        assert stats['queue']['geo'] == {
+            'pending': 1,
+            'processing': 0,
+            'done': 0,
+            'failed': 0,
+            'skipped': 0,
+        }
+
+
+@pytest.mark.usefixtures('apply_migrations')
 async def test_claim_sets_processing_and_not_reclaimed(scan_dirs):
     storage_id, photos, _ = scan_dirs
     (photos / 'p.jpg').write_bytes(b'fake')
