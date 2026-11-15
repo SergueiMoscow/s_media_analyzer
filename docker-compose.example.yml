@@ -1,0 +1,71 @@
+# Пример запуска s_media_analyzer рядом с s_media_service.
+# Один образ, две точки входа: analyzer-api (FastAPI) и analyzer-worker (фоновая обработка).
+#
+# Примечания:
+#   * PostgreSQL — общая с s_media_service, образ с расширением pgvector;
+#   * MEDIA_ROOT монтируется read-only;
+#   * роль БД analyzer создаётся скриптом docs/db-role.sql (миграции удобно
+#     выполнять под ролью с правами на создание схемы/расширения).
+version: '3.10'
+
+services:
+  analyzer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c 'while !</dev/tcp/db/5432; do sleep 1; done; alembic upgrade head && uvicorn api.app:app --host 0.0.0.0 --port 8000'
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://analyzer:analyzer_password@db:5432/s_media_service
+      ANALYSIS_SCHEMA: analysis
+      FILES_SCHEMA: main
+      FILES_TABLE: files
+      MEDIA_ROOT: /storages
+      API_KEY: secret_key
+      SWAGGER_URL: /docs
+    volumes:
+      - /storages:/storages:ro
+    depends_on:
+      - db
+    restart: always
+
+  analyzer-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Точка входа воркера появится на этапе реализации воркера (раздел 8 ТЗ).
+    command: python -m worker.main
+    environment:
+      DATABASE_URL: postgresql://analyzer:analyzer_password@db:5432/s_media_service
+      ANALYSIS_SCHEMA: analysis
+      FILES_SCHEMA: main
+      FILES_TABLE: files
+      MEDIA_ROOT: /storages
+      API_KEY: secret_key
+      WORKER_CONCURRENCY: 1
+      WORKER_NICE: 10
+      WORKER_ACTIVE_HOURS: ""
+      LOCK_TIMEOUT_SEC: 900
+    volumes:
+      - /storages:/storages:ro
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+    restart: always
+
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: s_media_service
+    volumes:
+      - ./docs/db-role.sql:/docker-entrypoint-initdb.d/10-analyzer-role.sql:ro
+    restart: always
