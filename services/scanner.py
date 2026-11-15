@@ -68,7 +68,9 @@ async def scan_folder(  # noqa: C901
 
     def walk():
         if recursive:
-            for dirpath, _dirnames, filenames in os.walk(base):
+            for dirpath, dirnames, filenames in os.walk(base):
+                # не заходим в скрытые папки (AppleDouble/._* и т.п.)
+                dirnames[:] = [d for d in dirnames if not d.startswith('.')]
                 for fname in filenames:
                     yield dirpath, fname
         else:
@@ -80,6 +82,8 @@ async def scan_folder(  # noqa: C901
     for dirpath, fname in walk():
         if limit is not None and result.registered + result.updated >= limit:
             break
+        if fname.startswith('.'):
+            continue  # пропускаем скрытые файлы (._*, .DS_Store, .localized, …)
         kind = file_kind(fname)
         if kind == 'other':
             continue

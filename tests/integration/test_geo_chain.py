@@ -98,6 +98,26 @@ async def test_scan_is_idempotent(scan_dirs):
 
 
 @pytest.mark.usefixtures('apply_migrations')
+async def test_scan_skips_hidden_files_and_folders(scan_dirs):
+    storage_id, photos, _ = scan_dirs
+    (photos / 'visible.jpg').write_bytes(b'fake')
+    (photos / '._apple_double.jpeg').write_bytes(b'fake')
+    (photos / '.DS_Store').write_bytes(b'fake')
+    hidden_dir = photos / '.hidden'
+    hidden_dir.mkdir()
+    (hidden_dir / 'inside.jpg').write_bytes(b'fake')
+
+    async with AsyncSession() as session:
+        result = await scan_folder(session, storage_id)
+        assert result.registered == 1  # только visible.jpg
+
+        rows = await session.execute(
+            text(f'SELECT filename FROM {settings.ANALYSIS_SCHEMA}.scanned_files')
+        )
+        assert {row.filename for row in rows.all()} == {'visible.jpg'}
+
+
+@pytest.mark.usefixtures('apply_migrations')
 async def test_geo_search_and_stats(scan_dirs):
     storage_id, photos, _ = scan_dirs
     (photos / 'a.jpg').write_bytes(b'fake')

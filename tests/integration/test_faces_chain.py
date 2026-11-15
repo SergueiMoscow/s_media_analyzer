@@ -182,3 +182,28 @@ async def test_faces_processor_skips_confirmed_duplicate(scan_dirs, monkeypatch)
         faces = await get_faces_for_file(session, file_id, include_rejected=True)
         assert len(faces) == 1  # дубль отброшен, осталась только confirmed
         assert faces[0].status == 'confirmed'
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_faces_processor_skips_unreadable_image(scan_dirs):
+    storage_id, photos, _ = scan_dirs
+    # файл с расширением изображения, но битый (PIL не может его прочитать)
+    (photos / 'broken.jpg').write_bytes(b'not an image')
+
+    async with AsyncSession() as session:
+        await scan_folder(session, storage_id)
+        tasks = await claim_tasks(session, 'faces', 10, settings.LOCK_TIMEOUT_SEC)
+        assert len(tasks) == 1
+        file_id = tasks[0].file_id
+
+    await faces_processor.process_faces_task(tasks[0])
+
+    async with AsyncSession() as session:
+        status = await session.scalar(
+            text(
+                f'SELECT status FROM {settings.ANALYSIS_SCHEMA}.media_analysis '
+                f"WHERE file_id = :f AND kind = 'faces'"
+            ),
+            {'f': file_id},
+        )
+        assert status == 'skipped'

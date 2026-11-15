@@ -3,6 +3,8 @@ import asyncio
 import logging
 import os
 
+from PIL import UnidentifiedImageError
+
 from common.settings import settings
 from db.connector import AsyncSession
 from imaging import open_oriented_rgb, resize_to_max_side, to_bgr_numpy
@@ -141,6 +143,11 @@ async def process_faces_task(task) -> None:  # noqa: C901
                     await set_face_crop_path(session, face.id, rel_path)
 
             await complete_task(session, task_id, 'done')
+    except UnidentifiedImageError as exc:
+        # Перманентная ошибка: файл не является читаемым изображением — ретрай не поможет.
+        logger.warning('faces task %s skipped: unreadable image (%s)', task_id, exc)
+        async with AsyncSession() as session:
+            await complete_task(session, task_id, 'skipped', str(exc))
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.exception('faces task %s failed', task_id)
         for rel_path in created_crops:

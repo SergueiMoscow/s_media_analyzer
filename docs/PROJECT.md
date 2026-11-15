@@ -128,6 +128,8 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
    `mtime_ns`) → задачи `media_analysis` (`faces` только для изображений, `geo` для
    изображений и видео). Файлы, которых нет под обойдённым префиксом → `missing`.
    Плюс периодический `requeue_by_version` (задачи со старой `analyzer_version` → pending).
+   Скрытые файлы и папки (имя начинается с `.`: `._*`, `.DS_Store`, `.localized` и т.п.)
+   **не сканируются** — пропускаются и не попадают в `scanned_files`.
 
 2. **Очередь** (`repositories/analysis.py::claim_tasks`): `SELECT … FOR UPDATE
    SKIP LOCKED` по `status='pending'` или `status='processing' AND locked_at <
