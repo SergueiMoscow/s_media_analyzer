@@ -29,7 +29,7 @@ COPY pyproject.toml poetry.lock ./
 RUN python -m pip install --upgrade pip && \
     pip install poetry --no-cache-dir && \
     poetry config virtualenvs.create false && \
-    poetry install --no-dev --no-root --no-cache --no-interaction
+    poetry install --only main --no-root --no-cache --no-interaction
 
 COPY alembic ./alembic
 COPY api ./api
