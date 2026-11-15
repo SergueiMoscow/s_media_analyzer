@@ -44,6 +44,7 @@ class ProcessingItemOut(BaseModel):
 
     scanned_file_id: int
     catalog_file_id: UUID | None
+    storage_id: UUID
     folder_path: str
     filename: str
     kind: AnalysisKind
@@ -56,6 +57,7 @@ class QueueItemOut(BaseModel):
 
     scanned_file_id: int
     catalog_file_id: UUID | None
+    storage_id: UUID
     folder_path: str
     filename: str
     kind: AnalysisKind
@@ -65,6 +67,7 @@ class QueueItemOut(BaseModel):
     locked_at: datetime | None
     processed_at: datetime | None
     analyzer_version: int
+    faces_count: int | None
 
 
 class StatsOut(BaseModel):

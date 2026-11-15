@@ -42,6 +42,7 @@ async def test_stats_processing_field(client, scan_dirs):
     item = body['processing'][0]
     assert item['scanned_file_id'] == file_id
     assert item['catalog_file_id'] == catalog_file_id
+    assert item['storage_id'] == str(storage_id)
     assert item['folder_path'] == folder_path
     assert item['filename'] == filename
     assert item['kind'] == 'faces'
@@ -67,6 +68,14 @@ async def test_queue_filters_and_total(client, scan_dirs):
     assert body['limit'] == 50
     assert body['offset'] == 0
     assert len(body['items']) == 6
+
+    # новые поля: storage_id и faces_count (null для geo; 0 — лиц пока нет)
+    for it in body['items']:
+        assert it['storage_id'] == str(storage_id)
+        if it['kind'] == 'faces':
+            assert it['faces_count'] == 0
+        else:
+            assert it['faces_count'] is None
 
     assert client.get('/queue', params={'kind': 'faces'}).json()['total'] == 3
     assert client.get('/queue', params={'status': 'pending'}).json()['total'] == 4

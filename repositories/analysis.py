@@ -1,7 +1,7 @@
 """Очередь обработки (media_analysis) и геоданные (media_geo)."""
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy import and_, case, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.settings import settings
@@ -180,6 +180,7 @@ async def get_processing(session: AsyncSession) -> list[dict]:
         select(
             MediaAnalysis.file_id.label('scanned_file_id'),
             ScannedFile.catalog_file_id,
+            ScannedFile.storage_id,
             ScannedFile.folder_path,
             ScannedFile.filename,
             MediaAnalysis.kind,
@@ -203,10 +204,21 @@ async def list_queue(
     offset: int = 0,
 ) -> tuple[list[dict], int]:
     """Детальная очередь media_analysis с путём файла, фильтрами и пагинацией."""
+    faces_count = case(
+        (
+            MediaAnalysis.kind == 'faces',
+            select(func.count(Face.id))
+            .where(Face.file_id == MediaAnalysis.file_id)
+            .correlate(MediaAnalysis)
+            .scalar_subquery(),
+        ),
+        else_=None,
+    )
     stmt = (
         select(
             MediaAnalysis.file_id.label('scanned_file_id'),
             ScannedFile.catalog_file_id,
+            ScannedFile.storage_id,
             ScannedFile.folder_path,
             ScannedFile.filename,
             MediaAnalysis.kind,
@@ -216,15 +228,27 @@ async def list_queue(
             MediaAnalysis.locked_at,
             MediaAnalysis.processed_at,
             MediaAnalysis.analyzer_version,
+            faces_count.label('faces_count'),
         )
         .join(ScannedFile, ScannedFile.id == MediaAnalysis.file_id)
     )
+    conditions = []
     if kind is not None:
-        stmt = stmt.where(MediaAnalysis.kind == kind)
+        conditions.append(MediaAnalysis.kind == kind)
     if status is not None:
-        stmt = stmt.where(MediaAnalysis.status == status)
+        conditions.append(MediaAnalysis.status == status)
+    if conditions:
+        stmt = stmt.where(*conditions)
 
-    total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    count_stmt = (
+        select(func.count())
+        .select_from(MediaAnalysis)
+        .join(ScannedFile, ScannedFile.id == MediaAnalysis.file_id)
+    )
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    total = await session.scalar(count_stmt) or 0
+
     result = await session.execute(stmt.order_by(MediaAnalysis.id).limit(limit).offset(offset))
     return [dict(m) for m in result.mappings().all()], total
 
