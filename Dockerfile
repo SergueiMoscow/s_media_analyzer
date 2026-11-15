@@ -40,7 +40,7 @@ COPY schemas ./schemas
 COPY services ./services
 COPY worker ./worker
 COPY docs ./docs
-COPY alembic.ini entrypoint.sh ./
+COPY alembic.ini entrypoint.sh imaging.py cli.py ./
 
 # По умолчанию запускается API; воркер запускается отдельной командой
 # (см. docker-compose.example.yml, сервис analyzer-worker).
