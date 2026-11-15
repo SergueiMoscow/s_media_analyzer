@@ -174,6 +174,61 @@ async def search_geo(
     return list(result.scalars().all())
 
 
+async def get_processing(session: AsyncSession) -> list[dict]:
+    """Задачи в обработке (status='processing') с путём файла из scanned_files."""
+    stmt = (
+        select(
+            MediaAnalysis.file_id.label('scanned_file_id'),
+            ScannedFile.catalog_file_id,
+            ScannedFile.folder_path,
+            ScannedFile.filename,
+            MediaAnalysis.kind,
+            MediaAnalysis.attempts,
+            MediaAnalysis.locked_at,
+        )
+        .join(ScannedFile, ScannedFile.id == MediaAnalysis.file_id)
+        .where(MediaAnalysis.status == 'processing')
+        .order_by(MediaAnalysis.id)
+    )
+    result = await session.execute(stmt)
+    return [dict(m) for m in result.mappings().all()]
+
+
+async def list_queue(
+    session: AsyncSession,
+    *,
+    kind: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """Детальная очередь media_analysis с путём файла, фильтрами и пагинацией."""
+    stmt = (
+        select(
+            MediaAnalysis.file_id.label('scanned_file_id'),
+            ScannedFile.catalog_file_id,
+            ScannedFile.folder_path,
+            ScannedFile.filename,
+            MediaAnalysis.kind,
+            MediaAnalysis.status,
+            MediaAnalysis.attempts,
+            MediaAnalysis.error,
+            MediaAnalysis.locked_at,
+            MediaAnalysis.processed_at,
+            MediaAnalysis.analyzer_version,
+        )
+        .join(ScannedFile, ScannedFile.id == MediaAnalysis.file_id)
+    )
+    if kind is not None:
+        stmt = stmt.where(MediaAnalysis.kind == kind)
+    if status is not None:
+        stmt = stmt.where(MediaAnalysis.status == status)
+
+    total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    result = await session.execute(stmt.order_by(MediaAnalysis.id).limit(limit).offset(offset))
+    return [dict(m) for m in result.mappings().all()], total
+
+
 async def get_stats(session: AsyncSession) -> dict:
     rows = await session.execute(
         select(MediaAnalysis.kind, MediaAnalysis.status, func.count())
@@ -195,6 +250,7 @@ async def get_stats(session: AsyncSession) -> dict:
     geo_total = await session.scalar(select(func.count()).select_from(MediaGeo)) or 0
     return {
         'queue': queue,
+        'processing': await get_processing(session),
         'scanned_files': scanned_files,
         'faces_total': faces_total,
         'faces_unassigned': faces_unassigned,

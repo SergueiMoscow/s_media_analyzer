@@ -1,11 +1,12 @@
-"""Административные эндпоинты: scan, reconcile-catalog, stats."""
+"""Административные эндпоинты: scan, reconcile-catalog, stats, queue."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from api.deps import get_session, require_api_key
-from repositories.analysis import get_stats
+from repositories.analysis import get_stats, list_queue
+from schemas.common import AnalysisKind, AnalysisStatus, Page
 from schemas.files import ScanRequest, ScanResult
-from schemas.geo import StatsOut
+from schemas.geo import QueueItemOut, StatsOut
 from services.reconcile import reconcile_catalog
 from services.scanner import scan_folder
 
@@ -34,3 +35,17 @@ async def admin_reconcile(session=Depends(get_session)):
 @router.get('/stats', response_model=StatsOut)
 async def stats(session=Depends(get_session)):
     return await get_stats(session)
+
+
+@router.get('/queue', response_model=Page[QueueItemOut])
+async def queue(
+    session=Depends(get_session),
+    kind: AnalysisKind | None = None,
+    status: AnalysisStatus | None = None,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    items, total = await list_queue(
+        session, kind=kind, status=status, limit=limit, offset=offset
+    )
+    return Page(items=items, total=total, limit=limit, offset=offset)

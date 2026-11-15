@@ -190,7 +190,8 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
 | `GET /people/{id}/files` | `catalog_file_id` файлов человека (без rejected), курсорная пагинация |
 | `PUT /persons/sync` | справочник людей + эталоны; после — перематчинг (`faces_matched`) |
 | `GET /geo/search` | `lat,lon,radius_m` или bbox; `include_unindexed`, `limit` ≤ 5000 |
-| `GET /stats` | очередь + счётчики |
+| `GET /stats` | очередь + счётчики + `processing` (задачи в обработке прямо сейчас) |
+| `GET /queue` | детальная очередь: фильтры `kind`/`status`, `limit` (1..500, default 50), `offset`; сортировка по `media_analysis.id` asc → `Page[QueueItemOut]` |
 
 ## 7. CLI
 
