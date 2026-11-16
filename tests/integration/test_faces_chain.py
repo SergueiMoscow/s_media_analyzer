@@ -207,3 +207,47 @@ async def test_faces_processor_skips_unreadable_image(scan_dirs):
             {'f': file_id},
         )
         assert status == 'skipped'
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_thumbnail_returns_404_for_unknown_storage(scan_dirs):
+    import httpx
+
+    from api.app import app
+    from db.models import Face, ScannedFile
+
+    scan_dirs  # SCAN_ROOTS = {TEST_STORAGE_ID: photos}
+
+    async with AsyncSession() as session:
+        scanned = ScannedFile(
+            storage_id=uuid.uuid4(),  # нет в SCAN_ROOTS
+            folder_path='',
+            filename='x.jpg',
+            kind='image',
+            status='present',
+        )
+        session.add(scanned)
+        await session.flush()
+        face = Face(
+            file_id=scanned.id,
+            bbox_x=0.1,
+            bbox_y=0.1,
+            bbox_w=0.5,
+            bbox_h=0.5,
+            embedding=[0.0] * 512,
+            det_score=0.9,
+            model_name='test',
+            analyzer_version=1,
+            status='auto',
+        )
+        session.add(face)
+        await session.flush()
+        face_id = face.id
+        await session.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+        headers = {'X-API-Key': settings.API_KEY}
+        resp = await client.get(f'/faces/{face_id}/thumbnail', headers=headers)
+        assert resp.status_code == 404
+        assert resp.json()['error']['error_code'] == 'storage_not_configured'

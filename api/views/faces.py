@@ -83,23 +83,30 @@ async def face_thumbnail(
         raise NotFound(error_code='not_found', error_message='Face not found')
 
     scanned = await get_scanned_file_or_404(session, face.file_id)
-    path = full_path(scanned.storage_id, scanned.folder_path, scanned.filename)
+    try:
+        path = full_path(scanned.storage_id, scanned.folder_path, scanned.filename)
+    except KeyError:
+        raise NotFound(
+            error_code='storage_not_configured', error_message='Storage not configured'
+        ) from None
+
+    headers = {'Cache-Control': 'public, max-age=86400'}
 
     if face.crop_path and settings.faces_dir_path is not None:
         abs_path = settings.faces_dir_path / face.crop_path
-        if abs_path.exists():
-            data = abs_path.read_bytes()
-            if size != settings.CROP_MAX_SIDE:
-                data = resize_jpeg(data, size)
-            return Response(
-                content=data,
-                media_type='image/jpeg',
-                headers={'Cache-Control': 'public, max-age=86400'},
-            )
+        try:
+            if abs_path.exists():
+                data = abs_path.read_bytes()
+                if size != settings.CROP_MAX_SIDE:
+                    data = resize_jpeg(data, size)
+                return Response(content=data, media_type='image/jpeg', headers=headers)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass  # вырезка недоступна/битая — генерируем из оригинала
 
-    data = await asyncio.to_thread(thumbnail_from_original, path, face.bbox, size)
-    return Response(
-        content=data,
-        media_type='image/jpeg',
-        headers={'Cache-Control': 'public, max-age=86400'},
-    )
+    try:
+        data = await asyncio.to_thread(thumbnail_from_original, path, face.bbox, size)
+    except Exception:  # pylint: disable=broad-exception-caught
+        raise NotFound(
+            error_code='thumbnail_unavailable', error_message='Thumbnail unavailable'
+        ) from None
+    return Response(content=data, media_type='image/jpeg', headers=headers)

@@ -97,6 +97,47 @@ async def _cleanup_crops(args) -> None:
     print(f'удалено осиротевших вырезок: {removed}')
 
 
+async def _recrop(args) -> None:
+    """Пересоздаёт вырезки лиц через исправленный make_crop_bytes."""
+    from sqlalchemy import select
+
+    from db.models import Face, ScannedFile
+    from repositories.faces import set_face_crop_path
+    from repositories.scanned_files import full_path
+    from services.crops import make_crop_bytes, write_crop
+
+    settings.validate_paths()
+
+    async with AsyncSession() as session:
+        if args.face_id is not None:
+            face = await session.get(Face, args.face_id)
+            faces = [face] if face is not None else []
+        else:
+            result = await session.execute(select(Face).order_by(Face.id))
+            faces = list(result.scalars().all())
+
+        recropped = 0
+        failed = 0
+        for face in faces:
+            scanned = await session.get(ScannedFile, face.file_id)
+            if scanned is None:
+                failed += 1
+                continue
+            try:
+                path = full_path(scanned.storage_id, scanned.folder_path, scanned.filename)
+                data = await asyncio.to_thread(make_crop_bytes, path, face.bbox)
+                rel_path = write_crop(face.id, data)
+                await set_face_crop_path(session, face.id, rel_path)
+                recropped += 1
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logging.warning('recrop face %s: %s', face.id, exc)
+                failed += 1
+
+        await session.commit()
+
+    print(f'пересоздано вырезок: {recropped}, ошибок: {failed}')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog='s_media_analyzer')
     sub = parser.add_subparsers(dest='cmd', required=True)
@@ -115,6 +156,12 @@ def main() -> None:
 
     p = sub.add_parser('cleanup-crops')
     p.set_defaults(func=_cleanup_crops)
+
+    p = sub.add_parser('recrop')
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument('--face-id', type=int, default=None)
+    g.add_argument('--all', action='store_true')
+    p.set_defaults(func=_recrop)
 
     args = parser.parse_args()
     if args.cmd == 'analyze':

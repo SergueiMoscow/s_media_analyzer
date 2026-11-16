@@ -50,16 +50,16 @@ def make_crop_bytes(path: str, bbox: dict) -> bytes:
 
 
 def resize_jpeg(data: bytes, size: int) -> bytes:
-    """Ресайзит JPEG-байты до квадрата size x size."""
+    """Ресайзит JPEG-байты, вписывая в size x size без искажения пропорций."""
     img = Image.open(io.BytesIO(data))
-    img = img.resize((size, size), Image.LANCZOS)
+    img.thumbnail((size, size), Image.LANCZOS)
     buf = io.BytesIO()
     img.convert('RGB').save(buf, format='JPEG', quality=settings.CROP_JPEG_QUALITY)
     return buf.getvalue()
 
 
 def thumbnail_from_original(path: str, bbox: dict, size: int) -> bytes:
-    """Вырезка лица с полями и ресайз до квадрата size x size."""
+    """Вырезка лица с полями и вписывание в size x size (пропорции сохраняются)."""
     data = make_crop_bytes(path, bbox)
     return resize_jpeg(data, size)
 
