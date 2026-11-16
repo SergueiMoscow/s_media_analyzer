@@ -1,7 +1,7 @@
 """Справочник людей: person_refs, имена (алиасы), эталонные эмбеддинги."""
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import PersonName, PersonRef, PersonRefEmbedding
@@ -92,6 +92,61 @@ async def delete_person_refs(session: AsyncSession, person_ids: list[UUID]) -> i
 async def list_person_ids(session: AsyncSession) -> list[UUID]:
     result = await session.execute(select(PersonRef.person_id))
     return list(result.scalars().all())
+
+
+async def list_people(
+    session: AsyncSession,
+    limit: int = 100,
+    offset: int = 0,
+    search: str | None = None,
+) -> tuple[list[dict], int]:
+    """Список людей (person_id -> имена) с пагинацией и поиском по имени.
+
+    Сортировка — по первому (основному) имени без учёта регистра; ``search``
+    фильтрует по любому имени (ILIKE ``%search%``).
+    """
+    primary_name = (
+        select(PersonName.name)
+        .where(PersonName.person_id == PersonRef.person_id)
+        .order_by(PersonName.id)
+        .limit(1)
+        .correlate(PersonRef)
+        .scalar_subquery()
+    )
+
+    conditions = []
+    if search:
+        conditions.append(
+            select(PersonName.id)
+            .where(PersonName.person_id == PersonRef.person_id)
+            .where(PersonName.name.ilike(f'%{search}%'))
+            .exists()
+        )
+
+    count_stmt = select(func.count()).select_from(PersonRef)
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    total = await session.scalar(count_stmt) or 0
+
+    stmt = select(PersonRef.person_id, primary_name.label('primary_name'))
+    if conditions:
+        stmt = stmt.where(*conditions)
+    stmt = stmt.order_by(func.lower(primary_name), PersonRef.person_id)
+    stmt = stmt.limit(limit).offset(offset)
+    rows = (await session.execute(stmt)).all()
+
+    person_ids = [row.person_id for row in rows]
+    names_map: dict[UUID, list[str]] = {pid: [] for pid in person_ids}
+    if person_ids:
+        names_rows = await session.execute(
+            select(PersonName.person_id, PersonName.name)
+            .where(PersonName.person_id.in_(person_ids))
+            .order_by(PersonName.person_id, PersonName.id)
+        )
+        for person_id, name in names_rows.all():
+            names_map[person_id].append(name)
+
+    return [{'person_id': pid, 'names': names_map[pid]} for pid in person_ids], total
 
 
 async def get_person_catalog_file_ids(

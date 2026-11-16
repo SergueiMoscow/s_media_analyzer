@@ -1,12 +1,13 @@
 """Эндпоинты справочника людей и имён (алиасов)."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from api.deps import get_session, require_api_key
 from common.exceptions import NotFound
 from repositories import persons as persons_repo
 from repositories.faces import rematch_faces
+from schemas.common import Page
 from schemas.persons import (
     PersonFilesOut,
     PersonNameAdd,
@@ -16,6 +17,19 @@ from schemas.persons import (
 )
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
+
+
+@router.get('/people', response_model=Page[PersonOut])
+async def people_list(
+    session=Depends(get_session),
+    search: str | None = None,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+):
+    items, total = await persons_repo.list_people(
+        session, limit=limit, offset=offset, search=search
+    )
+    return Page(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get('/people/{person_id}', response_model=PersonOut)

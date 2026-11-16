@@ -189,6 +189,7 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
 | `POST /clusters/{id}/merge` | слить в другой кластер |
 | `POST/DELETE /clusters/{id}/ignore` | пометить/снять «неинтересный» |
 | `GET /people/{id}` / `POST /people/{id}/names` / `DELETE /people/{id}/names/{name}` | человек и его имена |
+| `GET /people` | список людей (для «выбрать имя»): `limit`/`offset`, `search` (подстрока по имени) → `Page[PersonOut]` |
 | `GET /people/{id}/files` | `catalog_file_id` файлов человека (без rejected), курсорная пагинация |
 | `PUT /persons/sync` | справочник людей + эталоны; после — перематчинг (`faces_matched`) |
 | `GET /geo/search` | `lat,lon,radius_m` или bbox; `include_unindexed`, `limit` ≤ 5000 |
