@@ -82,8 +82,8 @@ tests/          # unit/, integration/, views/
 | `MAX_IMAGE_SIDE` | масштаб перед детекцией | `1600` |
 | `T_PERSON` | порог cosine для опознавания по эталону | `0.45` |
 | `T_CLUSTER` | порог cosine для присоединения к кластеру | `0.5` |
-| `CROP_MARGIN` | поля вокруг лица (бока/низ) | `0.2` |
-| `CROP_TOP_MARGIN` | доп. поле сверху (чтобы не резать волосы) | `0.4` |
+| `CROP_MARGIN` | поля вокруг лица (бока/низ) | `0.3` |
+| `CROP_TOP_MARGIN` | доп. поле сверху (чтобы не резать волосы) | `0.6` |
 | `CROP_MAX_SIDE` | длинная сторона вырезки, px | `256` |
 | `CROP_JPEG_QUALITY` | качество JPEG | `90` |
 | `WORKER_CONCURRENCY` / `WORKER_NICE` / `WORKER_ACTIVE_HOURS` / `LOCK_TIMEOUT_SEC` | параметры воркера | `1`/`10`/—/`900` |

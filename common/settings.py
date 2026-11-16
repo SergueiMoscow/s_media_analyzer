@@ -49,9 +49,9 @@ class Settings(BaseSettings):
     T_CLUSTER: float = 0.5
 
     # Вырезки лиц
-    CROP_MARGIN: float = 0.2
+    CROP_MARGIN: float = 0.3
     # Дополнительный отступ сверху (доля высоты bbox) — чтобы не обрезать волосы.
-    CROP_TOP_MARGIN: float = 0.4
+    CROP_TOP_MARGIN: float = 0.6
     CROP_MAX_SIDE: int = 256
     CROP_JPEG_QUALITY: int = 90
 
