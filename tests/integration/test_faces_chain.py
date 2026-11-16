@@ -135,6 +135,10 @@ async def test_faces_and_scanned_files_endpoints(scan_dirs, monkeypatch):
         assert len(faces) == 1
         assert faces[0]['has_crop'] is True
         assert faces[0]['scanned_file_id'] == file_id
+        # путь к исходному файлу (round-11)
+        assert faces[0]['storage_id'] == str(storage_id)
+        assert faces[0]['folder_path'] == ''
+        assert faces[0]['filename'] == 'p.jpg'
 
         resp = await client.get(f"/faces/{faces[0]['id']}/thumbnail", headers=headers)
         assert resp.status_code == 200

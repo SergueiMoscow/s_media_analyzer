@@ -148,6 +148,18 @@ class Face(Base):
         return self.scanned_file.catalog_file_id if self.scanned_file else None
 
     @property
+    def storage_id(self):
+        return self.scanned_file.storage_id if self.scanned_file else None
+
+    @property
+    def folder_path(self):
+        return self.scanned_file.folder_path if self.scanned_file else None
+
+    @property
+    def filename(self):
+        return self.scanned_file.filename if self.scanned_file else None
+
+    @property
     def has_crop(self) -> bool:
         return self.crop_path is not None
 

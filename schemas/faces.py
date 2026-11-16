@@ -22,6 +22,9 @@ class FaceOut(BaseModel):
     id: int
     scanned_file_id: int
     catalog_file_id: UUID | None
+    storage_id: UUID | None
+    folder_path: str | None
+    filename: str | None
     bbox: BBox
     det_score: float
     cluster_id: int | None
