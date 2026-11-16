@@ -15,6 +15,13 @@ class ClusterOut(BaseModel):
     sample_face_ids: list[int]
 
 
+class CandidateClusterOut(BaseModel):
+    cluster_id: int
+    size: int
+    sample_face_ids: list[int]
+    similarity: float
+
+
 class ClusterAssignRequest(BaseModel):
     person_id: UUID
     name: str = Field(min_length=1, max_length=200)

@@ -269,3 +269,66 @@ async def merge_clusters(session: AsyncSession, source_id: int, target_id: int) 
         )
     )
     await session.execute(delete(FaceCluster).where(FaceCluster.id == source_id))
+
+
+async def add_cluster_rejection(session: AsyncSession, person_id: UUID, cluster_id: int) -> bool:
+    """Запоминает отказ «кластер — не этот человек» (идемпотентно)."""
+    result = await session.execute(
+        text(
+            f'INSERT INTO {settings.ANALYSIS_SCHEMA}.face_cluster_rejections '
+            f'(person_id, cluster_id) VALUES (:pid, :cid) '
+            f'ON CONFLICT (person_id, cluster_id) DO NOTHING'
+        ),
+        {'pid': person_id, 'cid': cluster_id},
+    )
+    return result.rowcount > 0
+
+
+async def get_person_candidates(
+    session: AsyncSession,
+    person_id: UUID,
+    limit: int = 20,
+    min_similarity: float | None = None,
+) -> tuple[list[dict], int]:
+    """Кластеры, похожие на человека (косинусно близкие к любому эталону).
+
+    Исключает назначенные (`person_id IS NULL`), `ignored` и отклонённые для этого
+    человека кластеры; сортировка по similarity desc.
+    """
+    if min_similarity is None:
+        min_similarity = settings.T_CLUSTER
+
+    stmt = text(
+        f"""
+        SELECT fc.id AS cluster_id,
+               fc.size AS size,
+               MAX(1 - (fc.centroid <=> pre.embedding)) AS similarity
+        FROM {settings.ANALYSIS_SCHEMA}.face_clusters fc
+        JOIN {settings.ANALYSIS_SCHEMA}.person_ref_embeddings pre
+          ON pre.person_id = :pid
+        WHERE fc.person_id IS NULL
+          AND fc.ignored = false
+          AND NOT EXISTS (
+              SELECT 1 FROM {settings.ANALYSIS_SCHEMA}.face_cluster_rejections r
+              WHERE r.person_id = :pid AND r.cluster_id = fc.id
+          )
+        GROUP BY fc.id, fc.size
+        HAVING MAX(1 - (fc.centroid <=> pre.embedding)) >= :min_sim
+        ORDER BY similarity DESC
+        """
+    )
+    rows = (await session.execute(stmt, {'pid': person_id, 'min_sim': min_similarity})).all()
+
+    total = len(rows)
+    items = []
+    for row in rows[:limit]:
+        cluster_id = int(row.cluster_id)
+        items.append(
+            {
+                'cluster_id': cluster_id,
+                'size': int(row.size),
+                'sample_face_ids': await get_sample_face_ids(session, cluster_id),
+                'similarity': float(row.similarity),
+            }
+        )
+    return items, total

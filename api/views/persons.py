@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from api.deps import get_session, require_api_key
 from common.exceptions import NotFound
 from repositories import persons as persons_repo
-from repositories.faces import rematch_faces
+from repositories.faces import add_cluster_rejection, get_person_candidates, rematch_faces
+from schemas.clusters import CandidateClusterOut
 from schemas.common import Page
 from schemas.persons import (
     PersonFilesOut,
@@ -30,6 +31,28 @@ async def people_list(
         session, limit=limit, offset=offset, search=search
     )
     return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get('/people/{person_id}/candidates', response_model=Page[CandidateClusterOut])
+async def person_candidates(
+    person_id: UUID,
+    session=Depends(get_session),
+    limit: int = Query(default=20, ge=1, le=100),
+    min_similarity: float | None = None,
+):
+    items, total = await get_person_candidates(
+        session, person_id, limit=limit, min_similarity=min_similarity
+    )
+    return Page(items=items, total=total, limit=limit, offset=0)
+
+
+@router.post('/people/{person_id}/reject-cluster/{cluster_id}')
+async def person_reject_cluster(
+    person_id: UUID, cluster_id: int, session=Depends(get_session)
+):
+    await add_cluster_rejection(session, person_id, cluster_id)
+    await session.commit()
+    return {'status': 'ok'}
 
 
 @router.get('/people/{person_id}', response_model=PersonOut)

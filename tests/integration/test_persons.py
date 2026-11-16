@@ -152,3 +152,65 @@ async def test_people_endpoint():
         body = resp.json()
         assert body['total'] == 1
         assert body['items'][0]['person_id'] == str(p2)
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_person_candidates_filters_and_sorting():
+    from sqlalchemy import text
+
+    from repositories.faces import (
+        add_cluster_rejection,
+        create_cluster,
+        get_person_candidates,
+    )
+
+    person_id = uuid.uuid4()
+    other_person = uuid.uuid4()
+
+    async with AsyncSession() as session:
+        await upsert_person_name(session, person_id, 'Аня')
+        await add_person_embedding(session, person_id, [1.0] + [0.0] * 511)
+
+        top = await create_cluster(session, [1.0] + [0.0] * 511)  # sim 1.0
+        second = await create_cluster(session, [1.0, 1.0] + [0.0] * 510)  # sim ~0.707
+        assigned = await create_cluster(session, [1.0] + [0.0] * 511)
+        ignored = await create_cluster(session, [1.0] + [0.0] * 511)
+        rejected = await create_cluster(session, [1.0] + [0.0] * 511)
+
+        # назначенный — исключается
+        await session.execute(
+            text(
+                f'UPDATE {settings.ANALYSIS_SCHEMA}.face_clusters '
+                f'SET person_id = :pid WHERE id = :cid'
+            ),
+            {'pid': other_person, 'cid': assigned},
+        )
+        # ignored — исключается
+        await session.execute(
+            text(
+                f'UPDATE {settings.ANALYSIS_SCHEMA}.face_clusters '
+                f'SET ignored = true WHERE id = :cid'
+            ),
+            {'cid': ignored},
+        )
+        # отклонённый — исключается
+        await add_cluster_rejection(session, person_id, rejected)
+        await session.commit()
+
+        items, total = await get_person_candidates(session, person_id, limit=20)
+        assert total == 2
+        assert [it['cluster_id'] for it in items] == [top, second]
+        assert items[0]['similarity'] > items[1]['similarity']
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_reject_cluster_idempotent():
+    from repositories.faces import add_cluster_rejection
+
+    person_id = uuid.uuid4()
+    cluster_id = 12345  # логическая связь, FK нет
+
+    async with AsyncSession() as session:
+        assert await add_cluster_rejection(session, person_id, cluster_id) is True
+        assert await add_cluster_rejection(session, person_id, cluster_id) is False
+        await session.commit()

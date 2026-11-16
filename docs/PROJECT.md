@@ -191,6 +191,8 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
 | `GET /people/{id}` / `POST /people/{id}/names` / `DELETE /people/{id}/names/{name}` | человек и его имена |
 | `GET /people` | список людей (для «выбрать имя»): `limit`/`offset`, `search` (подстрока по имени) → `Page[PersonOut]` |
 | `GET /people/{id}/files` | `catalog_file_id` файлов человека (без rejected), курсорная пагинация |
+| `GET /people/{id}/candidates` | похожие кластеры (не назначенные/не ignored/не отклонённые, косинусно близкие к эталонам): `limit`, `min_similarity` → `Page[CandidateClusterOut]` |
+| `POST /people/{id}/reject-cluster/{cluster_id}` | отказ «кластер — не этот человек» (идемпотентно) |
 | `PUT /persons/sync` | справочник людей + эталоны; после — перематчинг (`faces_matched`) |
 | `GET /geo/search` | `lat,lon,radius_m` или bbox; `include_unindexed`, `limit` ≤ 5000 |
 | `GET /stats` | очередь + счётчики + `processing` (задачи в обработке прямо сейчас) |

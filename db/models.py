@@ -189,6 +189,20 @@ class PersonRefEmbedding(Base):
     embedding = Column(Vector(EMBEDDING_DIM), nullable=False)
 
 
+class FaceClusterRejection(Base):
+    """Отказ «этот кластер — не этот человек» (логическая связь, без FK)."""
+
+    __tablename__ = 'face_cluster_rejections'
+    __table_args__ = (
+        UniqueConstraint('person_id', 'cluster_id', name='uq_face_cluster_rejections'),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    person_id = Column(GUID, nullable=False)
+    cluster_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text('now()'))
+
+
 class MediaGeo(Base):
     """Геоданные (одна запись на файл)."""
 
