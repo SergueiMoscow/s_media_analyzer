@@ -46,7 +46,7 @@ class RescanRequest(BaseModel):
 
 class CatalogLink(BaseModel):
     scanned_file_id: int
-    catalog_file_id: UUID
+    catalog_file_id: UUID | None  # None — очистить связь с каталогом
 
 
 class CatalogLinksRequest(BaseModel):

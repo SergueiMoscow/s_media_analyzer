@@ -41,6 +41,14 @@ async def catalog_file_faces(
     return await build_faces_out(session, faces)
 
 
+@router.get('/faces/{face_id}', response_model=FaceOut)
+async def face_info(face_id: int, session=Depends(get_session)):
+    face = await get_face_by_id(session, face_id)
+    if face is None:
+        raise NotFound(error_code='not_found', error_message='Face not found')
+    return await build_face_out(session, face)
+
+
 @router.patch('/faces/{face_id}', response_model=FaceUpdateResult)
 async def patch_face(face_id: int, body: FaceUpdate, session=Depends(get_session)):
     face = await get_face_by_id(session, face_id)

@@ -140,6 +140,15 @@ async def test_faces_and_scanned_files_endpoints(scan_dirs, monkeypatch):
         assert faces[0]['folder_path'] == ''
         assert faces[0]['filename'] == 'p.jpg'
 
+        # GET /faces/{id} (round-14)
+        resp = await client.get(f"/faces/{faces[0]['id']}", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()['storage_id'] == str(storage_id)
+        assert resp.json()['filename'] == 'p.jpg'
+
+        resp = await client.get('/faces/999999', headers=headers)
+        assert resp.status_code == 404
+
         resp = await client.get(f"/faces/{faces[0]['id']}/thumbnail", headers=headers)
         assert resp.status_code == 200
         assert resp.headers['content-type'] == 'image/jpeg'
@@ -255,3 +264,94 @@ async def test_thumbnail_returns_404_for_unknown_storage(scan_dirs):
         resp = await client.get(f'/faces/{face_id}/thumbnail', headers=headers)
         assert resp.status_code == 404
         assert resp.json()['error']['error_code'] == 'storage_not_configured'
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_cluster_promotable_files(scan_dirs, monkeypatch):
+    import httpx
+
+    from api.app import app
+
+    storage_id, photos, _ = scan_dirs
+    Image.new('RGB', (100, 100), (255, 0, 0)).save(photos / 'p.jpg', 'JPEG')
+    monkeypatch.setattr(
+        faces_processor,
+        'detect_and_embed',
+        lambda bgr, det_score_min: [
+            Detection(bbox=(10.0, 10.0, 60.0, 60.0), det_score=0.9, embedding=EMBEDDING_ONE)
+        ],
+    )
+
+    async with AsyncSession() as session:
+        await scan_folder(session, storage_id)
+        tasks = await claim_tasks(session, 'faces', 10, settings.LOCK_TIMEOUT_SEC)
+        file_id = tasks[0].file_id
+    await faces_processor.process_faces_task(tasks[0])
+
+    async with AsyncSession() as session:
+        face = (await get_faces_for_file(session, file_id))[0]
+        cluster_id = face.cluster_id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+        headers = {'X-API-Key': settings.API_KEY}
+
+        resp = await client.get(f'/clusters/{cluster_id}/promotable-files', headers=headers)
+        assert resp.status_code == 200
+        items = resp.json()
+        assert len(items) == 1
+        assert items[0]['scanned_file_id'] == file_id
+        assert items[0]['storage_id'] == str(storage_id)
+        assert items[0]['filename'] == 'p.jpg'
+
+        resp = await client.get('/clusters/999999/promotable-files', headers=headers)
+        assert resp.status_code == 404
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_catalog_links_clear(scan_dirs):
+    import httpx
+
+    from api.app import app
+
+    storage_id, photos, _ = scan_dirs
+    (photos / 'p.jpg').write_bytes(b'fake')
+
+    async with AsyncSession() as session:
+        await scan_folder(session, storage_id)
+        file_id = (
+            await session.execute(
+                text(f'SELECT id FROM {settings.ANALYSIS_SCHEMA}.scanned_files LIMIT 1')
+            )
+        ).scalar()
+
+    catalog_id = uuid.uuid4()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+        headers = {'X-API-Key': settings.API_KEY}
+
+        # установить связь
+        resp = await client.put(
+            '/scanned-files/catalog-links',
+            json={'links': [{'scanned_file_id': file_id, 'catalog_file_id': str(catalog_id)}]},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        # очистить связь (catalog_file_id = null)
+        resp = await client.put(
+            '/scanned-files/catalog-links',
+            json={'links': [{'scanned_file_id': file_id, 'catalog_file_id': None}]},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    async with AsyncSession() as session:
+        linked = await session.scalar(
+            text(
+                f'SELECT catalog_file_id FROM {settings.ANALYSIS_SCHEMA}.scanned_files '
+                f'WHERE id = :id'
+            ),
+            {'id': file_id},
+        )
+        assert linked is None

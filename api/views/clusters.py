@@ -12,11 +12,13 @@ from schemas.clusters import (
 )
 from schemas.common import Page
 from schemas.faces import FaceOut
+from schemas.files import PromoteItem
 from services.clustering import (
     assign_cluster_service,
     build_cluster_out,
     build_faces_out,
     merge_clusters_service,
+    promotable_files_for_cluster,
     set_ignored_service,
 )
 
@@ -57,6 +59,13 @@ async def cluster_faces(
     return Page(
         items=await build_faces_out(session, faces), total=total, limit=limit, offset=offset
     )
+
+
+@router.get('/clusters/{cluster_id}/promotable-files', response_model=list[PromoteItem])
+async def cluster_promotable_files(cluster_id: int, session=Depends(get_session)):
+    if await get_cluster(session, cluster_id) is None:
+        raise NotFound(error_code='not_found', error_message='Cluster not found')
+    return await promotable_files_for_cluster(session, cluster_id)
 
 
 @router.post('/clusters/{cluster_id}/assign', response_model=ClusterAssignResult)

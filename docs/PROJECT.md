@@ -179,12 +179,14 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
 | `GET /scanned-files/{id}/geo` | геоданные файла |
 | `GET /scanned-files/{id}/analysis` | статусы обработки |
 | `POST /scanned-files/{id}/rescan` | повторный анализ, 202 |
-| `PUT /scanned-files/catalog-links` | записать связь с каталогом (идемпотентно) |
+| `PUT /scanned-files/catalog-links` | записать/очистить связь с каталогом (`catalog_file_id` может быть `null`) |
 | `GET /catalog-files/{catalog_file_id}/faces` и `/geo` | данные по уже связанному файлу (404 если нет связи) |
+| `GET /faces/{id}` | лицо → `FaceOut` (404 если нет) |
 | `PATCH /faces/{id}` | подтвердить/отклонить/назначить/снять; `promote` → `FaceUpdateResult` |
 | `GET /faces/{id}/thumbnail` | вырезка (`size`, кэш-заголовки; при отсутствии файла — on-the-fly) |
 | `GET /clusters` | фильтры `unassigned`, `ignored`, `min_size`, сортировка по size desc → `Page[ClusterOut]` |
 | `GET /clusters/{id}/faces` | лица кластера |
+| `GET /clusters/{id}/promotable-files` | файлы кластера без `catalog_file_id` → `list[PromoteItem]` |
 | `POST /clusters/{id}/assign` | назвать кластер (`person_id`, `name`, `promote`) → `ClusterAssignResult` |
 | `POST /clusters/{id}/merge` | слить в другой кластер |
 | `POST/DELETE /clusters/{id}/ignore` | пометить/снять «неинтересный» |
