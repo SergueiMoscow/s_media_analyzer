@@ -268,6 +268,28 @@ async def assign_cluster(
     return result.rowcount
 
 
+async def reconcile_cluster_person(session: AsyncSession, cluster_id: int | None) -> None:
+    """Синхронизирует face_clusters.person_id с person_id не-rejected лиц кластера.
+
+    Если у кластера ровно один различный (не null) ``person_id`` — проставляет его;
+    ноль или несколько — сбрасывает в ``None``.
+    """
+    if cluster_id is None:
+        return
+    person_ids = (
+        await session.execute(
+            select(Face.person_id)
+            .where(Face.cluster_id == cluster_id, Face.status != 'rejected')
+            .where(Face.person_id.is_not(None))
+            .distinct()
+        )
+    ).scalars().all()
+    person_id = person_ids[0] if len(person_ids) == 1 else None
+    await session.execute(
+        update(FaceCluster).where(FaceCluster.id == cluster_id).values(person_id=person_id)
+    )
+
+
 async def rematch_faces(session: AsyncSession) -> int:
     """Перематчивает авто-лица без person_id по эталонам (раздел 9.6 ТЗ)."""
     result = await session.execute(

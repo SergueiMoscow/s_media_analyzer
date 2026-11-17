@@ -13,7 +13,7 @@ from api.deps import (
 )
 from common.exceptions import NotFound
 from common.settings import settings
-from repositories.faces import get_face_by_id, get_faces_for_file
+from repositories.faces import get_face_by_id, get_faces_for_file, reconcile_cluster_person
 from repositories.persons import upsert_person_name
 from repositories.scanned_files import full_path
 from schemas.faces import FaceOut, FaceUpdate, FaceUpdateResult
@@ -64,6 +64,8 @@ async def patch_face(face_id: int, body: FaceUpdate, session=Depends(get_session
         face.person_id = body.person_id
     if body.status is not None:
         face.status = body.status
+
+    await reconcile_cluster_person(session, face.cluster_id)
 
     files_to_promote: list[PromoteItem] = []
     if body.promote and face.scanned_file.catalog_file_id is None:

@@ -352,3 +352,69 @@ async def test_person_faces_endpoint():
         assert len(body['items']) == 1
         assert body['items'][0]['id'] == face_id
         assert body['items'][0]['storage_id'] == str(storage_id)
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_reconcile_cluster_person():
+    from sqlalchemy import select
+
+    from db.models import Face, FaceCluster, ScannedFile
+    from repositories.faces import create_cluster, reconcile_cluster_person
+
+    p1 = uuid.uuid4()
+    p2 = uuid.uuid4()
+
+    async with AsyncSession() as session:
+        cluster_id = await create_cluster(session, [1.0] + [0.0] * 511)
+        sf = ScannedFile(
+            storage_id=uuid.uuid4(),
+            folder_path='',
+            filename='a.jpg',
+            kind='image',
+            status='present',
+        )
+        session.add(sf)
+        await session.flush()
+        sf_id = sf.id
+
+        def add_face(person_id, status='auto'):
+            face = Face(
+                file_id=sf_id,
+                bbox_x=0.1,
+                bbox_y=0.1,
+                bbox_w=0.5,
+                bbox_h=0.5,
+                embedding=[0.0] * 512,
+                det_score=0.9,
+                model_name='test',
+                analyzer_version=1,
+                person_id=person_id,
+                status=status,
+                cluster_id=cluster_id,
+            )
+            session.add(face)
+            return face
+
+        async def cluster_person():
+            return await session.scalar(
+                select(FaceCluster.person_id).where(FaceCluster.id == cluster_id)
+            )
+
+        add_face(p1)
+        add_face(p1)
+        await session.flush()
+
+        await reconcile_cluster_person(session, cluster_id)
+        assert await cluster_person() == p1  # один person_id — проставлен
+
+        f3 = add_face(p2)
+        await session.flush()
+        await reconcile_cluster_person(session, cluster_id)
+        assert await cluster_person() is None  # два person_id — сброс
+
+        f3.status = 'rejected'
+        await session.flush()
+        await reconcile_cluster_person(session, cluster_id)
+        assert await cluster_person() == p1  # rejected не считается
+
+        await session.commit()
