@@ -189,6 +189,17 @@ async def get_cluster_faces(
     return list(result.scalars().all()), total
 
 
+async def get_person_faces(
+    session: AsyncSession, person_id: UUID, limit: int = 100, offset: int = 0
+) -> tuple[list[Face], int]:
+    stmt = select(Face).where(Face.person_id == person_id, Face.status != 'rejected')
+    total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    result = await session.execute(
+        stmt.order_by(Face.det_score.desc(), Face.id).limit(limit).offset(offset)
+    )
+    return list(result.scalars().all()), total
+
+
 async def get_sample_face_ids(session: AsyncSession, cluster_id: int, limit: int = 6) -> list[int]:
     result = await session.execute(
         select(Face.id)

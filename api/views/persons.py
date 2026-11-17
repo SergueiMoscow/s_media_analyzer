@@ -6,31 +6,57 @@ from fastapi import APIRouter, Depends, Query
 from api.deps import get_session, require_api_key
 from common.exceptions import NotFound
 from repositories import persons as persons_repo
-from repositories.faces import add_cluster_rejection, get_person_candidates, rematch_faces
+from repositories.faces import (
+    add_cluster_rejection,
+    get_person_candidates,
+    get_person_faces,
+    rematch_faces,
+)
 from schemas.clusters import CandidateClusterOut
 from schemas.common import Page
+from schemas.faces import FaceOut
 from schemas.persons import (
     PersonFilesOut,
     PersonNameAdd,
     PersonOut,
+    PersonSummaryOut,
     PersonSyncRequest,
     PersonSyncResult,
 )
+from services.clustering import build_faces_out
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
-@router.get('/people', response_model=Page[PersonOut])
+@router.get('/people', response_model=Page[PersonSummaryOut])
 async def people_list(
     session=Depends(get_session),
     search: str | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ):
-    items, total = await persons_repo.list_people(
+    items, total = await persons_repo.list_people_summaries(
         session, limit=limit, offset=offset, search=search
     )
     return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get('/people/{person_id}/faces', response_model=Page[FaceOut])
+async def person_faces(
+    person_id: UUID,
+    session=Depends(get_session),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+):
+    faces, total = await get_person_faces(
+        session, person_id, limit=limit, offset=offset
+    )
+    return Page(
+        items=await build_faces_out(session, faces),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get('/people/{person_id}/candidates', response_model=Page[CandidateClusterOut])

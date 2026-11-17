@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import PersonName, PersonRef, PersonRefEmbedding
+from db.models import Face, PersonName, PersonRef, PersonRefEmbedding, ScannedFile
 
 
 async def get_names(session: AsyncSession, person_id: UUID) -> list[str]:
@@ -147,6 +147,76 @@ async def list_people(
             names_map[person_id].append(name)
 
     return [{'person_id': pid, 'names': names_map[pid]} for pid in person_ids], total
+
+
+SAMPLE_FACES = 6
+
+
+async def list_people_summaries(
+    session: AsyncSession,
+    limit: int = 100,
+    offset: int = 0,
+    search: str | None = None,
+) -> tuple[list[dict], int]:
+    """Сводка по людям: имена + агрегаты лиц (face_count, sample, счётчики файлов)."""
+    people, total = await list_people(session, limit, offset, search)
+    person_ids = [p['person_id'] for p in people]
+    if not person_ids:
+        return [], total
+
+    # face_count и счётчики файлов — одним GROUP BY (не N+1).
+    agg_stmt = (
+        select(
+            Face.person_id,
+            func.count().label('face_count'),
+            func.count(func.distinct(ScannedFile.id)).label('total_files_count'),
+            func.count(func.distinct(ScannedFile.id))
+            .filter(ScannedFile.catalog_file_id.is_not(None))
+            .label('catalog_files_count'),
+        )
+        .join(ScannedFile, ScannedFile.id == Face.file_id)
+        .where(Face.person_id.in_(person_ids))
+        .where(Face.status != 'rejected')
+        .group_by(Face.person_id)
+    )
+    agg_rows = (await session.execute(agg_stmt)).all()
+    counts = {row.person_id: row for row in agg_rows}
+
+    # sample-лица (топ-N по det_score) — одним запросом через оконную функцию.
+    rn = func.row_number().over(
+        partition_by=Face.person_id,
+        order_by=(Face.det_score.desc(), Face.id),
+    ).label('rn')
+    sample_subq = (
+        select(Face.person_id, Face.id, rn)
+        .where(Face.person_id.in_(person_ids))
+        .where(Face.status != 'rejected')
+        .subquery()
+    )
+    sample_stmt = (
+        select(sample_subq.c.person_id, sample_subq.c.id)
+        .where(sample_subq.c.rn <= SAMPLE_FACES)
+        .order_by(sample_subq.c.person_id, sample_subq.c.rn)
+    )
+    samples: dict[UUID, list[int]] = {pid: [] for pid in person_ids}
+    for person_id, face_id in (await session.execute(sample_stmt)).all():
+        samples[person_id].append(int(face_id))
+
+    items = []
+    for person in people:
+        pid = person['person_id']
+        row = counts.get(pid)
+        items.append(
+            {
+                'person_id': pid,
+                'names': person['names'],
+                'face_count': int(row.face_count) if row else 0,
+                'sample_face_ids': samples[pid],
+                'catalog_files_count': int(row.catalog_files_count) if row else 0,
+                'total_files_count': int(row.total_files_count) if row else 0,
+            }
+        )
+    return items, total
 
 
 async def get_person_catalog_file_ids(

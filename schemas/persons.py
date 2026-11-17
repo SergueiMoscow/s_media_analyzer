@@ -26,6 +26,15 @@ class PersonOut(BaseModel):
     names: list[str]
 
 
+class PersonSummaryOut(BaseModel):
+    person_id: UUID
+    names: list[str]
+    face_count: int
+    sample_face_ids: list[int]
+    catalog_files_count: int
+    total_files_count: int
+
+
 class PersonNameAdd(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 

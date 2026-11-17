@@ -144,8 +144,22 @@ async def test_people_endpoint():
         assert body['limit'] == 100
         assert body['offset'] == 0
         assert body['items'] == [
-            {'person_id': str(p1), 'names': ['Anna']},
-            {'person_id': str(p2), 'names': ['Boris']},
+            {
+                'person_id': str(p1),
+                'names': ['Anna'],
+                'face_count': 0,
+                'sample_face_ids': [],
+                'catalog_files_count': 0,
+                'total_files_count': 0,
+            },
+            {
+                'person_id': str(p2),
+                'names': ['Boris'],
+                'face_count': 0,
+                'sample_face_ids': [],
+                'catalog_files_count': 0,
+                'total_files_count': 0,
+            },
         ]
 
         resp = await client.get('/people', params={'search': 'bor'}, headers=headers)
@@ -214,3 +228,127 @@ async def test_reject_cluster_idempotent():
         assert await add_cluster_rejection(session, person_id, cluster_id) is True
         assert await add_cluster_rejection(session, person_id, cluster_id) is False
         await session.commit()
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_people_summaries_aggregates():
+    from db.models import Face, ScannedFile
+    from repositories.persons import list_people_summaries
+
+    person_id = uuid.uuid4()
+    catalog_file_id = uuid.uuid4()
+
+    async with AsyncSession() as session:
+        await upsert_person_name(session, person_id, 'Аня')
+
+        sf1 = ScannedFile(
+            storage_id=uuid.uuid4(),
+            folder_path='',
+            filename='a.jpg',
+            kind='image',
+            status='present',
+            catalog_file_id=catalog_file_id,
+        )
+        sf2 = ScannedFile(
+            storage_id=uuid.uuid4(),
+            folder_path='',
+            filename='b.jpg',
+            kind='image',
+            status='present',
+        )
+        session.add(sf1)
+        session.add(sf2)
+        await session.flush()
+
+        f1 = Face(
+            file_id=sf1.id,
+            bbox_x=0.1,
+            bbox_y=0.1,
+            bbox_w=0.5,
+            bbox_h=0.5,
+            embedding=[0.0] * 512,
+            det_score=0.9,
+            model_name='test',
+            analyzer_version=1,
+            person_id=person_id,
+            status='auto',
+        )
+        f2 = Face(
+            file_id=sf2.id,
+            bbox_x=0.1,
+            bbox_y=0.1,
+            bbox_w=0.5,
+            bbox_h=0.5,
+            embedding=[0.0] * 512,
+            det_score=0.8,
+            model_name='test',
+            analyzer_version=1,
+            person_id=person_id,
+            status='auto',
+        )
+        session.add(f1)
+        session.add(f2)
+        await session.flush()
+        f1_id, f2_id = f1.id, f2.id
+        await session.commit()
+
+        items, total = await list_people_summaries(session, limit=100, offset=0)
+        assert total == 1
+        item = items[0]
+        assert item['person_id'] == person_id
+        assert item['names'] == ['Аня']
+        assert item['face_count'] == 2
+        assert item['sample_face_ids'] == [f1_id, f2_id]  # по det_score desc
+        assert item['catalog_files_count'] == 1
+        assert item['total_files_count'] == 2
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_person_faces_endpoint():
+    import httpx
+
+    from api.app import app
+    from db.models import Face, ScannedFile
+
+    person_id = uuid.uuid4()
+    storage_id = uuid.uuid4()
+
+    async with AsyncSession() as session:
+        await upsert_person_name(session, person_id, 'Аня')
+        sf = ScannedFile(
+            storage_id=storage_id,
+            folder_path='',
+            filename='a.jpg',
+            kind='image',
+            status='present',
+        )
+        session.add(sf)
+        await session.flush()
+        face = Face(
+            file_id=sf.id,
+            bbox_x=0.1,
+            bbox_y=0.1,
+            bbox_w=0.5,
+            bbox_h=0.5,
+            embedding=[0.0] * 512,
+            det_score=0.9,
+            model_name='test',
+            analyzer_version=1,
+            person_id=person_id,
+            status='auto',
+        )
+        session.add(face)
+        await session.flush()
+        face_id = face.id
+        await session.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+        headers = {'X-API-Key': settings.API_KEY}
+        resp = await client.get(f'/people/{person_id}/faces', headers=headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['total'] == 1
+        assert len(body['items']) == 1
+        assert body['items'][0]['id'] == face_id
+        assert body['items'][0]['storage_id'] == str(storage_id)

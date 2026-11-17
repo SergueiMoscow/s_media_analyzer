@@ -191,7 +191,8 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
 | `POST /clusters/{id}/merge` | слить в другой кластер |
 | `POST/DELETE /clusters/{id}/ignore` | пометить/снять «неинтересный» |
 | `GET /people/{id}` / `POST /people/{id}/names` / `DELETE /people/{id}/names/{name}` | человек и его имена |
-| `GET /people` | список людей (для «выбрать имя»): `limit`/`offset`, `search` (подстрока по имени) → `Page[PersonOut]` |
+| `GET /people` | список людей (сводка): `limit`/`offset`, `search` (подстрока по имени) → `Page[PersonSummaryOut]` (`face_count`, `sample_face_ids`, счётчики файлов) |
+| `GET /people/{id}/faces` | лица человека (без rejected): `limit`/`offset` → `Page[FaceOut]` |
 | `GET /people/{id}/files` | `catalog_file_id` файлов человека (без rejected), курсорная пагинация |
 | `GET /people/{id}/candidates` | похожие кластеры (не назначенные/не ignored/не отклонённые, косинусно близкие к эталонам): `limit`, `min_similarity` → `Page[CandidateClusterOut]` |
 | `POST /people/{id}/reject-cluster/{cluster_id}` | отказ «кластер — не этот человек» (идемпотентно) |
