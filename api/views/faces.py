@@ -14,6 +14,7 @@ from api.deps import (
 from common.exceptions import NotFound
 from common.settings import settings
 from repositories.faces import get_face_by_id, get_faces_for_file
+from repositories.persons import upsert_person_name
 from repositories.scanned_files import full_path
 from schemas.faces import FaceOut, FaceUpdate, FaceUpdateResult
 from schemas.files import PromoteItem
@@ -58,6 +59,8 @@ async def patch_face(face_id: int, body: FaceUpdate, session=Depends(get_session
     if body.unassign:
         face.person_id = None
     elif body.person_id is not None:
+        if body.name is not None:
+            await upsert_person_name(session, body.person_id, body.name)
         face.person_id = body.person_id
     if body.status is not None:
         face.status = body.status

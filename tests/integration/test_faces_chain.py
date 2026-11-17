@@ -355,3 +355,82 @@ async def test_catalog_links_clear(scan_dirs):
             {'id': file_id},
         )
         assert linked is None
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_patch_face_creates_person_name(scan_dirs, monkeypatch):
+    import httpx
+
+    from api.app import app
+
+    storage_id, photos, _ = scan_dirs
+    Image.new('RGB', (100, 100), (255, 0, 0)).save(photos / 'p.jpg', 'JPEG')
+    monkeypatch.setattr(
+        faces_processor,
+        'detect_and_embed',
+        lambda bgr, det_score_min: [
+            Detection(bbox=(10.0, 10.0, 60.0, 60.0), det_score=0.9, embedding=EMBEDDING_ONE)
+        ],
+    )
+
+    async with AsyncSession() as session:
+        await scan_folder(session, storage_id)
+        tasks = await claim_tasks(session, 'faces', 10, settings.LOCK_TIMEOUT_SEC)
+        file_id = tasks[0].file_id
+    await faces_processor.process_faces_task(tasks[0])
+
+    async with AsyncSession() as session:
+        face_id = (await get_faces_for_file(session, file_id))[0].id
+
+    person_id = uuid.uuid4()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+        headers = {'X-API-Key': settings.API_KEY}
+        resp = await client.patch(
+            f'/faces/{face_id}',
+            json={'person_id': str(person_id), 'name': 'Аня'},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()['face']['person_name'] == 'Аня'
+
+    async with AsyncSession() as session:
+        assert await get_names(session, person_id) == ['Аня']
+
+
+@pytest.mark.usefixtures('apply_migrations')
+async def test_clusters_list_returns_file_counts(scan_dirs, monkeypatch):
+    import httpx
+
+    from api.app import app
+    from repositories.scanned_files import set_catalog_file_id
+
+    storage_id, photos, _ = scan_dirs
+    Image.new('RGB', (100, 100), (255, 0, 0)).save(photos / 'p.jpg', 'JPEG')
+    monkeypatch.setattr(
+        faces_processor,
+        'detect_and_embed',
+        lambda bgr, det_score_min: [
+            Detection(bbox=(10.0, 10.0, 60.0, 60.0), det_score=0.9, embedding=EMBEDDING_ONE)
+        ],
+    )
+
+    async with AsyncSession() as session:
+        await scan_folder(session, storage_id)
+        tasks = await claim_tasks(session, 'faces', 10, settings.LOCK_TIMEOUT_SEC)
+        file_id = tasks[0].file_id
+    await faces_processor.process_faces_task(tasks[0])
+
+    async with AsyncSession() as session:
+        await set_catalog_file_id(session, file_id, uuid.uuid4())
+        await session.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+        headers = {'X-API-Key': settings.API_KEY}
+        resp = await client.get('/clusters', headers=headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['total'] == 1
+        assert body['items'][0]['total_files_count'] == 1
+        assert body['items'][0]['catalog_files_count'] == 1

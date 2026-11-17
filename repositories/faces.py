@@ -5,7 +5,7 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.settings import settings
-from db.models import Face, FaceCluster
+from db.models import Face, FaceCluster, ScannedFile
 from services.faces_service import l2_normalize
 
 
@@ -197,6 +197,33 @@ async def get_sample_face_ids(session: AsyncSession, cluster_id: int, limit: int
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def get_cluster_file_counts(
+    session: AsyncSession, cluster_id: int
+) -> tuple[int, int]:
+    """Число (catalog_count, total_count) различных файлов кластера.
+
+    ``catalog_count`` — сколько файлов уже связано с каталогом
+    (``catalog_file_id IS NOT NULL``), ``total_count`` — всего различных файлов.
+    """
+    file_ids = (
+        await session.execute(
+            select(Face.file_id).where(Face.cluster_id == cluster_id).distinct()
+        )
+    ).scalars().all()
+    if not file_ids:
+        return 0, 0
+    catalog_count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(ScannedFile)
+            .where(ScannedFile.id.in_(file_ids))
+            .where(ScannedFile.catalog_file_id.is_not(None))
+        )
+        or 0
+    )
+    return int(catalog_count), len(file_ids)
 
 
 async def set_cluster_ignored(session: AsyncSession, cluster_id: int, ignored: bool) -> None:

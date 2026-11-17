@@ -182,7 +182,7 @@ API, в `worker.main` и в CLI; завершается с ошибкой, ес�
 | `PUT /scanned-files/catalog-links` | записать/очистить связь с каталогом (`catalog_file_id` может быть `null`) |
 | `GET /catalog-files/{catalog_file_id}/faces` и `/geo` | данные по уже связанному файлу (404 если нет связи) |
 | `GET /faces/{id}` | лицо → `FaceOut` (404 если нет) |
-| `PATCH /faces/{id}` | подтвердить/отклонить/назначить/снять; `promote` → `FaceUpdateResult` |
+| `PATCH /faces/{id}` | подтвердить/отклонить/назначить/снять (при назначении `person_id` + `name` создаёт имя); `promote` → `FaceUpdateResult` |
 | `GET /faces/{id}/thumbnail` | вырезка (`size`, кэш-заголовки; при отсутствии файла — on-the-fly) |
 | `GET /clusters` | фильтры `unassigned`, `ignored`, `min_size`, сортировка по size desc → `Page[ClusterOut]` |
 | `GET /clusters/{id}/faces` | лица кластера |

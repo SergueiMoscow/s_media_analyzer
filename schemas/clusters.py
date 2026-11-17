@@ -13,6 +13,8 @@ class ClusterOut(BaseModel):
     person_name: str | None = None
     ignored: bool
     sample_face_ids: list[int]
+    catalog_files_count: int
+    total_files_count: int
 
 
 class CandidateClusterOut(BaseModel):

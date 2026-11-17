@@ -39,6 +39,7 @@ class FaceUpdate(BaseModel):
     """PATCH /faces/{id}: хотя бы одно поле."""
 
     person_id: UUID | None = None
+    name: str | None = None
     status: FaceStatus | None = None
     unassign: bool = False
     promote: bool = False

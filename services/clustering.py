@@ -31,6 +31,9 @@ async def build_faces_out(session: AsyncSession, faces: list[Face]) -> list[Face
 async def build_cluster_out(session: AsyncSession, cluster: FaceCluster) -> ClusterOut:
     names = await get_names_map(session, {cluster.person_id}) if cluster.person_id else {}
     sample = await faces_repo.get_sample_face_ids(session, cluster.id)
+    catalog_count, total_count = await faces_repo.get_cluster_file_counts(
+        session, cluster.id
+    )
     return ClusterOut(
         id=cluster.id,
         size=cluster.size,
@@ -38,6 +41,8 @@ async def build_cluster_out(session: AsyncSession, cluster: FaceCluster) -> Clus
         person_name=names.get(cluster.person_id),
         ignored=cluster.ignored,
         sample_face_ids=sample,
+        catalog_files_count=catalog_count,
+        total_files_count=total_count,
     )
 
 
