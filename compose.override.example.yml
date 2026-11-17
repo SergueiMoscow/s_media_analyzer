@@ -1,0 +1,13 @@
+# Пример сервер-специфичных монтирований медиа-каталогов (read-only).
+# Скопируйте в compose.override.yml и укажите свои пути.
+# docker compose автоматически мержит compose.yml + compose.override.yml.
+# Контейнерные пути (/storages, /2026) должны совпадать с SCAN_ROOTS из .env.
+services:
+  analyzer-api:
+    volumes:
+      - /storages:/storages:ro
+      - /home/sergey/server_soft/SyncThing/photos:/2026:ro
+  analyzer-worker:
+    volumes:
+      - /storages:/storages:ro
+      - /home/sergey/server_soft/SyncThing/photos:/2026:ro

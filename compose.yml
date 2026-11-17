@@ -1,7 +1,8 @@
-# s_media_analyzer — деплой рядом с s_media_service (та же PostgreSQL).
-# Оба сервиса работают на одной машине (homeserver), поэтому network_mode: host
-# и общая БД через localhost:5432. Хранилища монтируются read-only так же, как
-# у s_media_service.
+# s_media_analyzer — общий compose (для GitHub).
+# Сервер-специфичные монтирования медиа-каталогов — в compose.override.yml
+# (см. compose.override.example.yml). docker compose мержит оба файла.
+# network_mode: host — анализатор работает рядом с s_media_service на одной
+# машине и ходит в общую БД через localhost:5432.
 services:
   analyzer-api:
     image: ghcr.io/sergueimoscow/s_media_analyzer:latest
@@ -12,9 +13,6 @@ services:
     command: bash -c 'while !</dev/tcp/localhost/5432; do sleep 1; done; alembic upgrade head && uvicorn api.app:app --host 0.0.0.0 --port 8000'
     volumes:
       - ./.env:/app/.env:ro
-      - /storages:/storages:ro
-      # Сервер-специфичный mount (SyncThing -> каталог 2026), как у service.
-      - /home/sergey/server_soft/SyncThing/photos:/2026:ro
       - ./faces:/faces
     restart: always
 
@@ -27,7 +25,5 @@ services:
     command: python -m worker.main
     volumes:
       - ./.env:/app/.env:ro
-      - /storages:/storages:ro
-      - /home/sergey/server_soft/SyncThing/photos:/2026:ro
       - ./faces:/faces
     restart: always
